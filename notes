@@ -1,0 +1,8 @@
+
+Filtering degenerated homograpy
+
+https://dsp.stackexchange.com/questions/1990/filtering-ransac-estimated-homographies
+-- dont understand algorithm inside
+
+https://link.springer.com/chapter/10.1007/978-3-642-17691-3_19#
+-- this one seems easy but will probably cancel switching left and right side
