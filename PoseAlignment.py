@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import random
 
+from numpy.core.numeric import cross
+
 
 def divideChunks(l, n):
     temp = []
@@ -14,6 +16,8 @@ def divideChunks(l, n):
 def get2PointsDistance(p1, p2):
     return np.sqrt(np.sum(np.power((p1 - p2), 2)))
 
+def distancesBetweenPoints(points1, points2):
+    return np.sqrt(np.sum(np.power((points1 - points2), 2), axis=1))
 
 def getHomographyMatrix(p1, p2):
     A = []
@@ -29,66 +33,67 @@ def getHomographyMatrix(p1, p2):
     return H
 
 def isRigidTransformation(transformation):
-    transposed = transformation.transpose()
-    points = {
-        np.matrix([0, 0, 1]),
-        np.matrix([1920, 0, 1]),
-        np.matrix([1920, 1080, 1]),
-        np.matrix([0, 1080, 1]),
-    }
-    points2 = [np.matmul(x,transposed) for x in points]
-    print()
+    points = np.array([[0, 0, 1], [1920, 0, 1], [1920, 1080, 1], [0, 1080, 1],])
+    points = np.matmul(points, transformation.transpose())
+    vectors = points - np.roll(points, 1, axis=0)
+    crossed = np.cross(vectors, np.roll(vectors, 1, axis=0))
+    return np.all(crossed[:,2] < 0) or np.all(crossed[:,2] > 0)
 
 def getRansacHomography(p1, p2, eps = 50):
-    # filter zeros
-    # p1, p2 = zip(*((point1, point2) for point1, point2 in zip(p1, p2) if point1 != [0,0] and point2 != [0,0]))
+    # rearange points in [x1, y1, 1, x2, y2, 1] format 
+    p1 = np.pad(p1, ((0,0),(0,1)), mode='constant', constant_values=1)
+    p2 = np.pad(p2, ((0,0),(0,1)), mode='constant', constant_values=1)
+    stackedPoints = np.hstack((p1, p2))
+    # filter points that openPose didnt find
+    filtered  = stackedPoints[np.all(stackedPoints != 0, axis=1)] 
 
-    inliersCount = 0
+    # ransac
     bestInliersCount = -1
     bestmodel = 0
     for cycle in range(0, 1000):
-        # setup
-        inliersCount = 0
-        # chose random 4 points
-        possibleInliersIndexes = random.sample(range(0, len(p1)), 4)
-        possibleInliersP1 = []
-        possibleInliersP2 = []
-        for index in possibleInliersIndexes:
-            possibleInliersP1.append(p1[index])
-            possibleInliersP2.append(p2[index])
+        # chose random 4 rows
+        InlierIndices = np.random.choice(filtered.shape[0], size=4, replace=False)
+        PossibleInliers = filtered[InlierIndices, :]
 
-        # calculate homography NOTE: so far i am using cv2 homography (its faster and the matrix loo nicer)
-        # homography = getHomographyMatrix(possibleInliersP1, possibleInliersP2)
-        # homographyTransposed = homography.transpose()
-        homography, status = cv2.findHomography(np.matrix(possibleInliersP1), np.matrix(possibleInliersP2))
+        # calculate model
+        homography, status = cv2.findHomography(PossibleInliers[:, [0,1]], PossibleInliers[:, [3,4]])
         if homography is None:
             continue    
         homographyTransposed = homography.transpose()
 
-        # find how many points fit the model with tolerance eps = 20
-        for (point1, point2) in zip(p1, p2):
-            point3d = np.matrix([point1[0], point1[1], 1])
-            transformed = np.matmul(point3d, homographyTransposed)[0:1, 0:2]
-            distance = get2PointsDistance(transformed, point2)
-            if distance < eps:
+        # filter degenerative homoraphy -- doesn't seem to do anything
+        if not isRigidTransformation(homography):
+            continue
+
+        # find how many points fit the model
+        inliersCount = 0
+        transformed = np.matmul(filtered[:, [0,1,2]], homographyTransposed)
+
+        for transformedPoint, referencePoint in zip(transformed, filtered[:, [3, 4, 5]]):
+            if get2PointsDistance(transformedPoint, referencePoint) < eps:
                 inliersCount += 1
         if inliersCount > bestInliersCount:
             bestInliersCount = inliersCount
             bestmodel = homography
+
+        # inliersCount = 0
+        # # find how many points fit the model
+        # for (point1, point2) in zip(p1, p2):
+        #     point3d = np.matrix([point1[0], point1[1], 1])
+        #     transformed = np.matmul(point3d, homographyTransposed)[0:1, 0:2]
+        #     distance = get2PointsDistance(transformed, point2)
+        #     if distance < eps:
+        #         inliersCount += 1
+        # if inliersCount > bestInliersCount:
+        #     bestInliersCount = inliersCount
+        #     bestmodel = homography
         # repeat and find best fit
 
-    inliersP1 = []
-    inliersP2 = []
-    for (point1, point2) in zip(p1, p2):
-        point3d = np.matrix([point1[0], point1[1], 1])
-        transformed = np.matmul(point3d, bestmodel.transpose())[0:1, 0:2]
-        distance = get2PointsDistance(transformed, point2)
-        if distance < eps:
-            inliersP1.append(point1)
-            inliersP2.append(point2)
+    transformed = np.matmul(filtered[:, [0,1,2]], bestmodel.transpose())
+    inliers = filtered[distancesBetweenPoints(transformed, filtered[:, [3,4,5]]) < eps, :]
     
-    if len(inliersP1) > 4:
-        finalHomography, status = cv2.findHomography(np.matrix(inliersP1), np.matrix(inliersP2))
+    if inliers.shape[0] > 4:
+        finalHomography, status = cv2.findHomography(inliers[:,[0,1]], inliers[:,[3,4]])
         if finalHomography is not None:
             bestmodel = finalHomography
 
@@ -99,7 +104,11 @@ def getRansacHomography(p1, p2, eps = 50):
 
 ###### MAIN ######
 
-main_path = ".\data\\Cobra"
+# a = np.array([[1920,1080,1], [-1920,0,1], [1920,-1080,1], [-1920,0,1]])
+# b = np.roll(a,-1,axis=0)
+# c = np.cross(a,b)
+
+main_path = ".\..\data\\Cobra"
 path_to_json = main_path + "\\Jsons\\"
 path_to_images = main_path + "\\Processed\\"
 path_to_aligned = main_path + "\\Aligned\\"
