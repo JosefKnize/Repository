@@ -136,10 +136,12 @@ def getRansacHomography(p1, p2, eps = 50):
     return bestmodel, additionalInfo
 
 
-def AlignImagesInFolder(mainPath):
+def AlignImagesInFolder(datasetPath, posePath):
+    mainPath = datasetPath + posePath
     jsonPath = mainPath + "\\Jsons\\"
-    imagesPath = mainPath + "\\Processed\\"
+    processedImagesPath = mainPath + "\\Processed\\"
     alignedPath = mainPath + "\\Aligned\\"
+    ImagesPath = mainPath + "\\Images\\"
     # Import Json files, pos_json = position JSON
     json_files = [pos_json for pos_json in os.listdir(jsonPath) if pos_json.endswith(".json")]
     print("Found: ", len(json_files), "json keypoint frame files")
@@ -148,7 +150,8 @@ def AlignImagesInFolder(mainPath):
         keyPoints = json.load(open(jsonPath + file))["people"][0]["pose_keypoints_2d"]
         points = divideChunks(keyPoints, 3)
         image = {
-            "path": file,
+            "file": file,
+            "ImagePath": ImagesPath + file[:-15] + '.png',
             "points": points[:15],
         }
         images.append(image)
@@ -156,30 +159,44 @@ def AlignImagesInFolder(mainPath):
 
     bestMeanInliers = -1
     bestRefImage = images[0]
-    # selecting reference picture
-    for refImage in images:
-        SumOfInliers = 0
-        for image in images:
-            homography, homographyInfo = getRansacAffineTransformation(image["points"], refImage["points"])
-            # homography, homographyInfo = getRansacHomography(image["points"], refImage["points"])
-            SumOfInliers += homographyInfo["InliersCount"]
-        if SumOfInliers / (len(images) - 1) > bestMeanInliers:
-            bestRefImage = refImage
-            bestMeanInliers = SumOfInliers / (len(images) - 1)
+    # # selecting reference picture
+    # for refImage in images:
+    #     SumOfInliers = 0
+    #     for image in images:
+    #         homography, homographyInfo = getRansacAffineTransformation(image["points"], refImage["points"])
+    #         # homography, homographyInfo = getRansacHomography(image["points"], refImage["points"])
+    #         SumOfInliers += homographyInfo["InliersCount"]
+    #     if SumOfInliers / (len(images) - 1) > bestMeanInliers:
+    #         bestRefImage = refImage
+    #         bestMeanInliers = SumOfInliers / (len(images) - 1)
 
-    print(f"Best ref image is {bestRefImage['path']} with {bestMeanInliers} MeanInliers.")
+    print(f"Best ref image is {bestRefImage['file']} with {bestMeanInliers} MeanInliers.")
 
 
     for image in images:
         homography, homographyInfo = getRansacAffineTransformation(image["points"], bestRefImage["points"])
-        # homography, homographyInfo = getRansacHomography(image["points"], bestRefImage["points"])
-        imageName = image["path"][:-15]
-        img = cv2.imread(f"{imagesPath}\\{imageName}_rendered.png")
+
+        imageName = image["file"][:-15]
+
+        # Check if ok
+        # TODO
+
+        # Store Json In Dataset
+        data = {}
+        data['src'] = image['ImagePath']
+        data['dst'] = bestRefImage['ImagePath']
+        data['transformation'] = homography.tolist()
+
+        with open(datasetPath + 'MachineData\\' + posePath + '_' + imageName + '.json' , 'w') as outfile:
+            json.dump(data, outfile)
+
+        # read and warp
+        img = cv2.imread(f"{processedImagesPath}\\{imageName}_rendered.png")
         out = cv2.warpPerspective(img, homography, (1920, 1080))
 
         # print info in image
         font = cv2.FONT_HERSHEY_SIMPLEX
-        org = (5, 20)
+        org = (5, 30)
         fontScale = 1
         color = (255, 0, 0)
         thickness = 1
@@ -190,20 +207,20 @@ def AlignImagesInFolder(mainPath):
         np.set_printoptions(suppress=True)
 
         out = cv2.putText(out, f"{homography[0, :]}",
-        (5,60), font, fontScale, color, thickness, cv2.LINE_AA)
+        (5,70), font, fontScale, color, thickness, cv2.LINE_AA)
 
         out = cv2.putText(out, f"{homography[1, :]}",
-        (5,100), font, fontScale, color, thickness, cv2.LINE_AA)
+        (5,110), font, fontScale, color, thickness, cv2.LINE_AA)
 
         out = cv2.putText(out, f"{homography[2, :]}",
-        (5,140), font, fontScale, color, thickness, cv2.LINE_AA)
+        (5,150), font, fontScale, color, thickness, cv2.LINE_AA)
 
         # save image
         cv2.imwrite(f"{alignedPath}{imageName}_aligned.png", out)
 
 ###### MAIN ######
 if __name__ == "__main__":
-    dataPath = ".\..\data\\"
+    datasetPath = ".\..\Data\\"
     posePaths = ["Cobra", "DownwardDog", "Child", "Triangle", "WarriorOne", "WarriorTwo", "WarriorTwoBack" ]
-    for path in posePaths:
-        AlignImagesInFolder(dataPath + path)
+    for posePath in posePaths:
+        AlignImagesInFolder(datasetPath, posePath)
