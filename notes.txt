@@ -12,3 +12,11 @@ https://link.springer.com/chapter/10.1007/978-3-642-17691-3_19#
 Affine Transformation doesn't allow stretching and shearing
 -- test = cv2.getAffineTransform(PossibleInliers[0:2, [0,1]], PossibleInliers[0:2, [3,4]])
 
+Asi předělat výstup CNN na body protože tu transformační matici to fakt nedává
+aktivační funkci RELU 
+víc dat pomohlo takže klidně 5000
+rozjet to na grafice
+
+spustit neuronovku na D3
+zamezit extremním maticím (horizontální překlopení, změna poměru vetší 1:2, rotace o víc jak +-30 )
+vyfiltrovat fotky který open pose špatně poznal

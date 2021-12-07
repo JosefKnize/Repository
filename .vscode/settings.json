@@ -1,4 +1,8 @@
 {
     "python.formatting.provider": "black",
-    "python.formatting.blackArgs": ["--line-length", "250"]
+    "python.formatting.blackArgs": [
+        "--line-length",
+        "250"
+    ],
+    "jupyter.jupyterServerType": "local"
 }

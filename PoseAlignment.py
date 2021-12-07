@@ -13,55 +13,64 @@ def divideChunks(l, n):
         temp.append(l[i : i + n - 1])
     return temp
 
+
 def get2PointsDistance(p1, p2):
     return np.sqrt(np.sum(np.power((p1 - p2), 2)))
+
 
 def distancesBetweenPoints(points1, points2):
     return np.sqrt(np.sum(np.power((points1 - points2), 2), axis=1))
 
-def getHomographyMatrix(p1, p2):
-    A = []
-    for i in range(0, len(p1)):
-        x, y = p1[i][0], p1[i][1]
-        u, v = p2[i][0], p2[i][1]
-        A.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
-        A.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
-    A = np.asarray(A)
-    U, S, Vh = np.linalg.svd(A)
-    L = Vh[-1, :] / Vh[-1, -1]
-    H = L.reshape(3, 3)
-    return H
+
+# def getHomographyMatrix(p1, p2):
+#     A = []
+#     for i in range(0, len(p1)):
+#         x, y = p1[i][0], p1[i][1]
+#         u, v = p2[i][0], p2[i][1]
+#         A.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
+#         A.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
+#     A = np.asarray(A)
+#     U, S, Vh = np.linalg.svd(A)
+#     L = Vh[-1, :] / Vh[-1, -1]
+#     H = L.reshape(3, 3)
+#     return H
+
 
 def isRigidTransformation(transformation):
-    points = np.array([[0, 0, 1], [1920, 0, 1], [1920, 1080, 1], [0, 1080, 1],])
+    points = np.array(
+        [
+            [0, 0, 1],
+            [1920, 0, 1],
+            [1920, 1080, 1],
+            [0, 1080, 1],
+        ]
+    )
     points = np.matmul(points, transformation.transpose())
     vectors = points - np.roll(points, 1, axis=0)
     crossed = np.cross(vectors, np.roll(vectors, 1, axis=0))
-    return np.all(crossed[:,2] < 0) or np.all(crossed[:,2] > 0)
+    return np.all(crossed[:, 2] < 0) or np.all(crossed[:, 2] > 0)
 
-def getRansacAffineTransformation(p1, p2, eps = 50):
-    # rearange points in [x1, y1, 1, x2, y2, 1] format 
-    p1 = np.pad(p1, ((0,0),(0,1)), mode='constant', constant_values=1)
-    p2 = np.pad(p2, ((0,0),(0,1)), mode='constant', constant_values=1)
+def calculateAffineTansformation(p1, p2, eps):
     stackedPoints = np.hstack((p1, p2))
+
     # filter points that openPose didnt find + convert to float32
-    filtered  = np.float32(stackedPoints[np.all(stackedPoints != 0, axis=1)])
+    filtered = np.float32(stackedPoints[np.all(stackedPoints != 0, axis=1)])
     if filtered.shape[0] < 3:
-        return np.float32([[1,0,0], [0,1,0], [0,0,1]]), { "InliersCount" : -1 }
+        return np.float32([[1, 0, 0], [0, 1, 0], [0, 0, 1]]), {"InliersCount": -1}
 
     # ransac
     bestInliersCount = -1
     bestmodel = 0
     for cycle in range(0, 1000):
-        # chose random 4 rows
+        # chose random 3 pairs of points
         InlierIndices = np.random.choice(filtered.shape[0], size=3, replace=False)
         PossibleInliers = filtered[InlierIndices, :]
 
         # calculate model
-        homography = cv2.getAffineTransform(PossibleInliers[:, [0,1]], PossibleInliers[:, [3,4]])
+        homography = cv2.getAffineTransform(PossibleInliers[:, [0, 1]], PossibleInliers[:, [3, 4]])
         if homography is None:
-            continue    
-        homography = np.vstack((homography,[0,0,1]))
+            continue
+        homography = np.vstack((homography, [0, 0, 1]))
         homographyTransposed = homography.transpose()
 
         # filter degenerative homoraphy -- doesn't seem to do anything
@@ -70,7 +79,7 @@ def getRansacAffineTransformation(p1, p2, eps = 50):
 
         # find how many points fit the model
         inliersCount = 0
-        transformed = np.matmul(filtered[:, [0,1,2]], homographyTransposed)
+        transformed = np.matmul(filtered[:, [0, 1, 2]], homographyTransposed)
 
         for transformedPoint, referencePoint in zip(transformed, filtered[:, [3, 4, 5]]):
             if get2PointsDistance(transformedPoint, referencePoint) < eps:
@@ -80,17 +89,34 @@ def getRansacAffineTransformation(p1, p2, eps = 50):
             bestmodel = homography
 
     additionalInfo = {
-        "InliersCount" : bestInliersCount,
+        "InliersCount": bestInliersCount,
     }
     return bestmodel, additionalInfo
 
-def getRansacHomography(p1, p2, eps = 50):
-    # rearange points in [x1, y1, 1, x2, y2, 1] format 
-    p1 = np.pad(p1, ((0,0),(0,1)), mode='constant', constant_values=1)
-    p2 = np.pad(p2, ((0,0),(0,1)), mode='constant', constant_values=1)
+
+
+def getRansacAffineTransformation(p1, p2, eps=50):
+    # rearange points in [x1, y1, 1, x2, y2, 1] format
+    p1 = np.pad(p1, ((0, 0), (0, 1)), mode="constant", constant_values=1)
+    p2 = np.pad(p2, ((0, 0), (0, 1)), mode="constant", constant_values=1)
+    p1Mirrored = p1[[0, 1, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11]]
+
+    model, info = calculateAffineTansformation(p1, p2, eps)
+    modelMirrored, infoMirrored = calculateAffineTansformation(p1Mirrored, p2, eps)
+
+    if infoMirrored['InliersCount'] > info['InliersCount']:
+        return modelMirrored, infoMirrored
+    
+    return model, info    
+
+
+def getRansacHomography(p1, p2, eps=50):
+    # rearange points in [x1, y1, 1, x2, y2, 1] format
+    p1 = np.pad(p1, ((0, 0), (0, 1)), mode="constant", constant_values=1)
+    p2 = np.pad(p2, ((0, 0), (0, 1)), mode="constant", constant_values=1)
     stackedPoints = np.hstack((p1, p2))
     # filter points that openPose didnt find
-    filtered  = stackedPoints[np.all(stackedPoints != 0, axis=1)] 
+    filtered = stackedPoints[np.all(stackedPoints != 0, axis=1)]
 
     # ransac
     bestInliersCount = -1
@@ -101,9 +127,9 @@ def getRansacHomography(p1, p2, eps = 50):
         PossibleInliers = filtered[InlierIndices, :]
 
         # calculate model
-        homography, status = cv2.findHomography(PossibleInliers[:, [0,1]], PossibleInliers[:, [3,4]])
+        homography, status = cv2.findHomography(PossibleInliers[:, [0, 1]], PossibleInliers[:, [3, 4]])
         if homography is None:
-            continue    
+            continue
         homographyTransposed = homography.transpose()
 
         # filter degenerative homoraphy -- doesn't seem to do anything
@@ -112,7 +138,7 @@ def getRansacHomography(p1, p2, eps = 50):
 
         # find how many points fit the model
         inliersCount = 0
-        transformed = np.matmul(filtered[:, [0,1,2]], homographyTransposed)
+        transformed = np.matmul(filtered[:, [0, 1, 2]], homographyTransposed)
 
         for transformedPoint, referencePoint in zip(transformed, filtered[:, [3, 4, 5]]):
             if get2PointsDistance(transformedPoint, referencePoint) < eps:
@@ -122,16 +148,16 @@ def getRansacHomography(p1, p2, eps = 50):
             bestmodel = homography
 
     # calculate and evaluate final homography
-    transformed = np.matmul(filtered[:, [0,1,2]], bestmodel.transpose())
-    inliers = filtered[distancesBetweenPoints(transformed, filtered[:, [3,4,5]]) < eps, :]
-    
+    transformed = np.matmul(filtered[:, [0, 1, 2]], bestmodel.transpose())
+    inliers = filtered[distancesBetweenPoints(transformed, filtered[:, [3, 4, 5]]) < eps, :]
+
     if inliers.shape[0] > 4:
-        finalHomography, status = cv2.findHomography(inliers[:,[0,1]], inliers[:,[3,4]])
+        finalHomography, status = cv2.findHomography(inliers[:, [0, 1]], inliers[:, [3, 4]])
         if finalHomography is not None:
             bestmodel = finalHomography
 
     additionalInfo = {
-        "InliersCount" : bestInliersCount,
+        "InliersCount": bestInliersCount,
     }
     return bestmodel, additionalInfo
 
@@ -147,15 +173,21 @@ def AlignImagesInFolder(datasetPath, posePath):
     print("Found: ", len(json_files), "json keypoint frame files")
     images = []
     for file in json_files:
-        keyPoints = json.load(open(jsonPath + file))["people"][0]["pose_keypoints_2d"]
+        js = json.load(open(jsonPath + file))
+        if len(js["people"]) == 0:
+            os.remove(jsonPath + file)
+            # os.remove(ImagesPath + file)
+            # os.remove(alignedPath + file)
+            print("Removed" + file)
+            continue
+        keyPoints = js["people"][0]["pose_keypoints_2d"]
         points = divideChunks(keyPoints, 3)
         image = {
             "file": file,
-            "ImagePath": ImagesPath + file[:-15] + '.png',
+            "ImagePath": ImagesPath + file[:-15] + ".png",
             "points": points[:15],
         }
         images.append(image)
-
 
     bestMeanInliers = -1
     bestRefImage = images[0]
@@ -172,7 +204,6 @@ def AlignImagesInFolder(datasetPath, posePath):
 
     print(f"Best ref image is {bestRefImage['file']} with {bestMeanInliers} MeanInliers.")
 
-
     for image in images:
         homography, homographyInfo = getRansacAffineTransformation(image["points"], bestRefImage["points"])
 
@@ -183,16 +214,17 @@ def AlignImagesInFolder(datasetPath, posePath):
 
         # Store Json In Dataset
         data = {}
-        data['src'] = image['ImagePath']
-        data['dst'] = bestRefImage['ImagePath']
-        data['transformation'] = homography.tolist()
+        data["src"] = image["ImagePath"]
+        data["dst"] = bestRefImage["ImagePath"]
+        data["transformation"] = homography.tolist()
 
-        with open(datasetPath + 'MachineData\\' + posePath + '_' + imageName + '.json' , 'w') as outfile:
+        with open(datasetPath + "MachineData\\" + posePath + "_" + imageName + ".json", "w") as outfile:
             json.dump(data, outfile)
 
         # read and warp
         img = cv2.imread(f"{processedImagesPath}\\{imageName}_rendered.png")
-        out = cv2.warpPerspective(img, homography, (1920, 1080))
+        out = cv2.warpPerspective(img, homography, (1440, 1440))
+        # out = cv2.warpPerspective(img, homography, (1920, 1080))
 
         # print info in image
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -200,27 +232,16 @@ def AlignImagesInFolder(datasetPath, posePath):
         fontScale = 1
         color = (255, 0, 0)
         thickness = 1
-        out = cv2.putText(out, f"Inlier count: {homographyInfo['InliersCount']}",
-        org, font, fontScale, color, thickness, cv2.LINE_AA)
+        out = cv2.putText(out, f"Inlier count: {homographyInfo['InliersCount']}", org, font, fontScale, color, thickness, cv2.LINE_AA)
 
         np.set_printoptions(precision=3)
         np.set_printoptions(suppress=True)
 
-        out = cv2.putText(out, f"{homography[0, :]}",
-        (5,70), font, fontScale, color, thickness, cv2.LINE_AA)
+        out = cv2.putText(out, f"{homography[0, :]}", (5, 70), font, fontScale, color, thickness, cv2.LINE_AA)
 
-        out = cv2.putText(out, f"{homography[1, :]}",
-        (5,110), font, fontScale, color, thickness, cv2.LINE_AA)
+        out = cv2.putText(out, f"{homography[1, :]}", (5, 110), font, fontScale, color, thickness, cv2.LINE_AA)
 
-        out = cv2.putText(out, f"{homography[2, :]}",
-        (5,150), font, fontScale, color, thickness, cv2.LINE_AA)
+        out = cv2.putText(out, f"{homography[2, :]}", (5, 150), font, fontScale, color, thickness, cv2.LINE_AA)
 
         # save image
         cv2.imwrite(f"{alignedPath}{imageName}_aligned.png", out)
-
-###### MAIN ######
-if __name__ == "__main__":
-    datasetPath = ".\..\Data\\"
-    posePaths = ["Cobra", "DownwardDog", "Child", "Triangle", "WarriorOne", "WarriorTwo", "WarriorTwoBack" ]
-    for posePath in posePaths:
-        AlignImagesInFolder(datasetPath, posePath)
