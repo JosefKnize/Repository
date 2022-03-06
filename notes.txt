@@ -1,5 +1,4 @@
-
-Filtering degenerated homograpy
+Filtering degenerating transforms
 
 https://dsp.stackexchange.com/questions/1990/filtering-ransac-estimated-homographies
 -- dont understand algorithm inside
@@ -7,16 +6,95 @@ https://dsp.stackexchange.com/questions/1990/filtering-ransac-estimated-homograp
 https://link.springer.com/chapter/10.1007/978-3-642-17691-3_19#
 -- this one seems easy but will probably cancel switching left and right side
 
-
-
 Affine Transformation doesn't allow stretching and shearing
 -- test = cv2.getAffineTransform(PossibleInliers[0:2, [0,1]], PossibleInliers[0:2, [3,4]])
 
-Asi předělat výstup CNN na body protože tu transformační matici to fakt nedává
-aktivační funkci RELU 
-víc dat pomohlo takže klidně 5000
-rozjet to na grafice
+22.2
+Tensoar Board na sledování průbehu
+odhadovat spíše transormaci x,y a rotaci
+Oddělit validační a trénovací
+z 128x128 na 256x256
+můžu nechávat černý pixely
+residuální spoje ( to spíš ne)
+klasifikační problém místo regrese (myslím že to bylo v tom jednom dokumentu)
 
-spustit neuronovku na D3
-zamezit extremním maticím (horizontální překlopení, změna poměru vetší 1:2, rotace o víc jak +-30 )
-vyfiltrovat fotky který open pose špatně poznal
+Zkusit jinej optimalizer SGA místo ADAM (začalo mi to vrace nan loss ... )
+
+Ok zejtřejší pepo vůbec ti to nefunguje takže se asi koukni do tý augmentace zkus si vyrendrovat to co dostává CNN a jakou dostává transformaci
+tohle by mělo aspoň něco málo dělat nevím proč ale od tý doby co jsem to "spravil" jsem z toho dostával jenom průměry (rámečky)
+
+jinak návrat k jedné fotce tu augmentovat pak stejná pozice
+na těhle zkoušet regrese -> klasifikační a body -> hodnoty transformace
+
+taková myšlenka že tu agmentaci asi nedělám nejlíp možná ty data vygenerovat a pak přes ně párkrát přejet IDK
+
+
+23.2
+MLSimpleTaskKeypointsV2 - Dva obrázky zarovnání funguje
+MLSimpleTaskKeypointsV2 - 3 obrázky pořád slušné výsledky né že by bylo 100% ale s tolerancí třeba 75 % ? +-
+MLSimpleTaskKeypointsV2 - 12 obrázků pořád výsledky né že by bylo 100% ale s tolerancí třeba 60 % ? +- (všude je náznak spravného směru, ale není to přesné)
+
+Ok zejtřejší pepo trochu to funguje ale nedělej si velké nadějě asi bych se vydal směrem zvetšit rozlišení, jiná parametrizace a klasifikace možná jiná póza HALF MOON
+jinak bych se snažil zapsat si konzultaci asi za tejden
+
+24.2
+10:28 Pokus s novou parametrizací .. nevěřím že to bude fungovat líp, obzlášt až po tom budu chtít i scale budu potřebovat asi data bez shearu
+12:06 Dobře zprovoznil jsem disekci transformace a zjistil jsem že jsem měl chybu v násobení generovaného posunu a rotace (pořadí)
+13:42 Dobře tx, ty, R moc nefunguje o dost horší jak body. Možná si ještě pohrát s váhama ale nemyslím si že tudy vede cesta (Možná nechat jenom jeden scale) (runs/DPA_24.2_OnePoseTxTyR_v1.0.2.4)
+
+27.2
+Klasifikace je supr určitě je co zlepšovat - rozlišení, segmentaci Regrese, možná menší loss pro sousedící rohy ( pozor aby mě to nekouslo)
+Začít dělat validaci správně sledovat kolik epoch je nejlpeší a fine tunovat neuronovku
+
+1.3
+Klasifikace na všech moc nejela (možná je to tím že jsem z jednoho záznamu vytvořil jenom další 4)
+Jinak na 3 pózách to docela jde ale to je možná overfit takže asi začít dělat tu validaci jako člověk
+
+2.3
+Konzultace docelaha v poho
+Pokusy s neuronovkou - learning rate, weight decay, batchsize, epochs, segmentace (jak to kolik pixelů, tak na kolik dílů)
+Validace - sledovat validační / trénovací, vykreslovat validaci do grafu
+Zuby na grafu docela problém 
+Batch size mocniny 2
+Pozor augmentace může vyříznout človeka
+Zvetšit rozlišení, augmentace šumem, kontrola vstupních dat
+možná dělat tu augmentaci fakt offline
+
+3.3
+DONE Zuby na grafu (To bylo overfitováním teď jsem předělal augmentaci a size neklesnu po loss 25 ale zuby už nejsou) 
+DONE Batch size mocniny 2
+
+No takže zase jsem si myslel že mi to funguje ale místo tohe jsem prostě overfitoval a proto mi to nefungovalo na všech pózach
+Co s tím ?? asi se vrátím ke 3 pózám a ty budu validovat a jestli to i tam byl overfit (což asi byl ...) tak už bude zbývat jenom zvetšit rozlišení a měnit tu segmentaci
+
+Pozor tohle prakticky znevažuje to že klasifikace je lepší (protože se to na ní spíš lépe overfituje)
+
+No a jsem v hajzlu asi bude lepší si to vygenerovat předem a přes to cyklit (pomáhá to i validační)
+Taky jsem hňup co jsem do teď dělal bylo 10000 před vygenerovanejch a asi 22 epoch což bylo u 6 overfit
+teď dělám 27 a 400 epoch což dá asi jenom 10000 takže ono by to mnohlo ještě něják fungovat
+
+4.3
+Normalizace né 1440 ale třeba 128 ideálně <-1, 1>
+Leaky Relu
+Initialize weights ?
+Zkusit míň vrstev (3-8 to reálně splňuju)
+Hiddne units co to je kolik jich dávat ???? .....
+Asi automatické early stoping
+dropout vrsty - DONE nepomohlo
+
+možná ještě krok zpět s augmentací
+
+určitě augmentaci zmírnit a nedělat to že +- <50,100> ale prostě <-50,50>
+
+
+Vrátit se k regresi. classifikace byla prostě lepší na overfitování ale jinak asi ne
+MSE MAE RMSE 
+
+5.3
+Dneska asi jedinej progress byl torchu zlepšení při použítí droupout vrstvy, ale ten kód jsem si změnil a stejně by to nestačilo
+
+6.3
+Asi do trénovacích dat nezarovnávat jenom k jednomu obrázku protože při trainingu je to vlastně konstatní obrázek
+
+
+runs/DPA_23.2_MultiplePose_Regression_v1.0.0.18_LearningRate_{LearningRate}_WeightDecay_{WeightDecay} - fix generování novejch dat
