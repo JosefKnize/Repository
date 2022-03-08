@@ -79,13 +79,11 @@ Leaky Relu
 Initialize weights ?
 Zkusit míň vrstev (3-8 to reálně splňuju)
 Hiddne units co to je kolik jich dávat ???? .....
-Asi automatické early stoping
-dropout vrsty - DONE nepomohlo
+dropout vrsty - DONE
 
 možná ještě krok zpět s augmentací
 
 určitě augmentaci zmírnit a nedělat to že +- <50,100> ale prostě <-50,50>
-
 
 Vrátit se k regresi. classifikace byla prostě lepší na overfitování ale jinak asi ne
 MSE MAE RMSE 
@@ -94,7 +92,22 @@ MSE MAE RMSE
 Dneska asi jedinej progress byl torchu zlepšení při použítí droupout vrstvy, ale ten kód jsem si změnil a stejně by to nestačilo
 
 6.3
-Asi do trénovacích dat nezarovnávat jenom k jednomu obrázku protože při trainingu je to vlastně konstatní obrázek
-
-
+Asi do trénovacích dat nezarovnávat jenom k jednomu obrázku protože při trainingu je to vlastně konstatní obrázek - Tohle Pomohlo
 runs/DPA_23.2_MultiplePose_Regression_v1.0.0.18_LearningRate_{LearningRate}_WeightDecay_{WeightDecay} - fix generování novejch dat
+runs/DPA_23.2_MultiplePose_Regression_v1.0.0.20 - 256 resolution
+
+8.3 
+runs/DPA_23.2_MultiplePose_Regression_v1.0.0.21 - Jedna normalizační vrsta => dobré zlepšení u 60 epochy je validační loss menší jak u rozlišení 256
+Zjistil jsem že jsem měl blbě classifikaci CrossEntropyLoss v sobě má softmax takže ho nemusím používat v neuronovce
+
+runs/DPA_23.2_MultiplePose_Regression_v1.0.0.22 - Udělat Model.Eval() => vypne dropout vrstvy (mělo by pomoct třeba o 1% (pozoruju že se val loss
+stašně rozosciloval ale motá se mírně níže (Ta oscialace mi nedává smysl jediné co jsem změnil bylo net.train() a net.eval() )))
+
+TODO:
+Early Stoping (asi není třeba overfit nekazí validační)
+Začít dělat nějákou acuracy s nějákým tolerance asi to udělat jako average corner distance po tom to zkoušet na 128 s různými LearningRaty a weightDecay jinej optimalizer
+asi by to chtělo přijít na způsob jak porovnávat ty obrázky
+zkusit ZeroGrad před loss.backward()
+dát za loss.backward() torch.nn.utils.clip_grad_norm(model.parameters(), max_norm=1)
+menší learning rate by měl zařídit aby ten loss tak neosciloval
+
